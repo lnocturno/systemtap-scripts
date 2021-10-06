@@ -1,0 +1,37 @@
+#!/usr/bin/env stap
+
+
+probe begin {
+	printf("submit_bio trace starts\n")
+}
+
+global trace
+
+probe kernel.function("submit_bio").call {
+	trace[execname(), tid()] = 1
+}
+probe kernel.function("submit_bio").return {
+	delete trace[execname(), tid()]
+}
+
+
+function trace(t_name, entry_p, extra) {
+	if ([t_name, tid()] in trace)
+		printf("%s%s%s %s\n",
+			thread_indent(entry_p),
+			(entry_p > 0 ? "->" : "<-"),
+			ppfunc(), extra)
+
+}
+
+probe kernel.function("*@block/blk-core.c").call {
+	trace("dd", 4, $$parms)
+}
+
+probe kernel.function("*@block/blk-core.c").return {
+	trace("dd", -4, $$return)
+}
+
+probe end {
+	printf("submit_bio trace ends\n")
+}
