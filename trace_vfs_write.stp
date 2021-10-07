@@ -1,0 +1,61 @@
+#!/usr/bin/env stap
+
+
+probe begin {
+	printf("vfs_write trace starts\n")
+}
+
+global trace
+
+probe kernel.function("vfs_write").call {
+	trace[execname(), tid()] = 1
+}
+
+probe kernel.function("vfs_write").return {
+	delete trace[execname(), tid()]
+}
+
+function trace(t_name, entry_p, extra) {
+	if ([t_name, tid()] in trace) {
+		indent = thread_indent(entry_p)
+
+		if (entry_p > 0)
+			printf("%s%s%s %s\n", indent, "-> ", ppfunc(), extra)
+	}
+
+}
+
+probe kernel.function("*@block/*.c").call {
+	trace("dd", 3, $$parms)
+}
+
+probe kernel.function("*@block/*.c").return {
+	trace("dd", -3, $$return)
+}
+
+probe kernel.function("*@fs/read_write.c").call {
+	trace("dd", 3, $$parms)
+}
+
+probe kernel.function("*@fs/read_write.c").return {
+	trace("dd", -3, $$return)
+}
+
+probe kernel.function("*@fs/block_dev.c").call {
+	trace("dd", 3, $$parms)
+}
+
+probe kernel.function("*@fs/block_dev.c").return {
+	trace("dd", -3, $$return)
+}
+
+probe kernel.function("*@mm/filemap.c").call {
+	trace("dd", 3, $$parms)
+}
+
+probe kernel.function("*@mm/filemap.c").return {
+	trace("dd", -3, $$return)
+}
+probe end {
+	printf("vfs_write trace ends\n")
+}
