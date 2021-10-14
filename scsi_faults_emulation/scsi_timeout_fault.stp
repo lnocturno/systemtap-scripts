@@ -1,0 +1,144 @@
+#!/usr/bin/env stap
+
+%{
+#include <linux/types.h>
+#include <scsi/scsi_cmnd.h>
+#include <scsi/scsi_device.h>
+#include <scsi/scsi_host.h>
+#include <linux/timer.h>
+#include <linux/blkdev.h>
+#include <linux/bio.h>
+#include <linux/mm_types.h>
+#include <linux/mm.h>
+#include <linux/fs.h>
+%}
+
+global dev_major
+global dev_minor
+
+global processed_cmds
+
+probe begin
+{
+	dev_major = $1
+	dev_minor = $2
+
+	printf("\nStart SCSI timeout fault emulation for %d:%d\n", dev_major, dev_minor)
+}
+
+function req_get_scmd:long (req:long)
+%{
+	struct scsi_cmnd *scmd = blk_mq_rq_to_pdu((struct request *)(long) THIS->l_req);
+
+	THIS->__retvalue = (long) scmd;
+%}
+
+function scmd_get_dir:long (scmd:long)
+%{
+	THIS->__retvalue = ((struct scsi_cmnd *)(long) THIS->l_scmd)->sc_data_direction;
+%}
+
+function scmd_get_lba:long (scmd:long)
+%{
+	THIS->__retvalue = scsi_get_lba(((struct scsi_cmnd *)(long) THIS->l_scmd));
+%}
+
+function scmd_get_transfer_len:long (scmd:long)
+%{
+	THIS->__retvalue = scsi_transfer_length(((struct scsi_cmnd *)(long) THIS->l_scmd));
+%}
+
+function scmd_get_cmd_len:long (scmd:long)
+%{
+	THIS->__retvalue = kread(&((struct scsi_cmnd *)(long) THIS->l_scmd)->cmd_len);
+%}
+
+function scmd_get_max_cmd_len:long (scmd:long)
+%{
+	THIS->__retvalue = kread(&((struct scsi_cmnd *)(long) THIS->l_scmd)->device->host->max_cmd_len);
+%}
+
+function scmd_set_abnormal_cmd_len:long (scmd:long)
+%{
+	struct scsi_cmnd *scmd = (struct scsi_cmnd *)(long) THIS->l_scmd;
+
+	if (!scmd || !scmd->device || !scmd->device->host)
+		goto out_err;
+
+	scmd->cmd_len = kread(&scmd->device->host->max_cmd_len) + 1;
+	THIS->__retvalue = 0;
+	return;
+
+out_err:
+	THIS->__retvalue = 1;
+	return;
+%}
+
+function scmd_set_cmd_done:long (scmd:long)
+%{
+	struct scsi_cmnd *scmd = (struct scsi_cmnd *)(long) THIS->l_scmd;
+	set_bit(SCMD_STATE_COMPLETE, &scmd->state);
+
+	THIS->__retvalue = 0;
+%}
+
+function scmd_clear_result:long (scmd:long)
+%{
+	struct scsi_cmnd *scmd = (struct scsi_cmnd *)(long) THIS->l_scmd;
+
+	clear_bit(SCMD_STATE_COMPLETE, &scmd->state);
+	scmd->result = 0;
+
+	THIS->__retvalue = 0;
+%}
+
+function to_str:string (scmd:long)
+{
+	return sprintf("%ld", scmd)
+}
+
+probe kernel.function("scsi_queue_rq")
+{
+	if ($bd->rq->rq_disk != 0) {
+		major = $bd->rq->rq_disk->major
+		minor = $bd->rq->rq_disk->first_minor
+	}
+
+	if (major == dev_major && minor == dev_minor) {
+		scmd = req_get_scmd($bd->rq)
+
+		if (!scmd_set_abnormal_cmd_len(scmd)) {
+			processed_cmds[to_str(scmd)] = 1
+
+			printf("\nscsi_queue_rq: cmd %p: Poison cmd\n", scmd)
+		}
+	}
+}
+
+probe kernel.function("scsi_mq_done")
+{
+	scmd = $cmd
+
+	if ([to_str(scmd)] in processed_cmds) {
+		scmd_set_cmd_done(scmd)
+
+		printf("\nscsi_mq_done: cmd %p: Fake cmd_done\n", scmd)
+	}
+}
+
+probe kernel.function("scsi_mq_done").return
+{
+	scmd = @entry($cmd)
+
+	if ([to_str(scmd)] in processed_cmds) {
+		scmd_clear_result(scmd)
+		delete processed_cmds[to_str(scmd)]
+
+		printf("\nscsi_mq_done: cmd %p: Clear result\n", scmd)
+	}
+}
+
+probe end
+{
+	printf("\nEmulation done\n");
+}
