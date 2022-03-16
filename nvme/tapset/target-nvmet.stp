@@ -1,0 +1,21 @@
+function _nvmet_ctrlid_print (ctrl) {
+    if (ctrl) {
+        return sprintf("%d", @cast(ctrl, "nvmet_ctrl")->cntlid);
+    }
+    else {
+        return "_"
+    }
+}
+
+function _nvmet_req_ctrlid_print (req) {
+    ctrl = @cast(req, "nvmet_req")->sq->ctrl;
+
+    return _nvmet_ctrlid_print(ctrl)
+}
+
+function _nvmet_req_print (req) {
+    qid = @cast(req, "nvmet_req")->sq->qid
+    cmd = @cast(req, "nvmet_req")->cmd
+
+    return _nvme_command_print(qid, cmd)
+}

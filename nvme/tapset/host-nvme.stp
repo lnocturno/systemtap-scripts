@@ -1,0 +1,31 @@
+%{
+#include <linux/blk-mq.h>
+%}
+
+function nvme_req:long (req:long) %{
+    struct request *req = (struct request*)(long) STAP_ARG_req;
+    STAP_RETVALUE = (long) blk_mq_rq_to_pdu(req);
+%}
+
+function nvme_req_qid(req) {
+    if (!@cast(req, "request")->q->queuedata) {
+        return 0;
+    }
+
+    return @cast(req, "request")->mq_hctx->queue_num + 1;
+}
+
+function _nvme_ctrlid_print (ctrl) {
+    return sprintf("%d", @cast(ctrl, "nvme_ctrl")->instance)
+}
+
+function _nvme_req_ctrlid_print (req) {
+    return _nvme_ctrlid_print(@cast(nvme_req(req), "nvme_request")->ctrl);
+}
+
+function _nvme_req_print (req) {
+    qid = nvme_req_qid(req)
+    cmd = @cast(nvme_req(req), "nvme_request")->cmd
+
+    return _nvme_command_print(qid, cmd)
+}

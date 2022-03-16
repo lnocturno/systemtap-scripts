@@ -1,0 +1,6 @@
+/* Connection management */
+
+/* Messy due to inline: ret = nvmet_tcp_alloc_queue(port, newsock); */
+/* Works for MOFED 5.5 */
+probe nvmet_tcp.alloc_queue = module("nvmet-tcp").statement("nvmet_tcp_accept_work@*/tcp.c:1669") {}
+probe nvmet_tcp.release_queue_work = module("nvmet-tcp").function("nvmet_tcp_release_queue_work") {}

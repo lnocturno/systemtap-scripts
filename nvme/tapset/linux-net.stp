@@ -1,0 +1,33 @@
+%{
+#include <linux/net.h>
+%}
+
+function _print_socket_name:string (sock) %{
+    struct socket *sock = (struct socket *) STAP_ARG_sock;
+    struct sockaddr sockaddr;
+    int ret;
+
+    ret = kernel_getsockname(sock, &sockaddr);
+
+    if (ret >= 0) {
+        snprintf(STAP_RETVALUE, MAXSTRINGLEN, "%pISp", &sockaddr);
+    }
+%}
+
+function _print_socket_peer:string (sock) %{
+    struct socket *sock = (struct socket *) STAP_ARG_sock;
+    struct sockaddr sockaddr;
+    int ret;
+
+    ret = kernel_getpeername(sock, &sockaddr);
+
+    if (ret >= 0) {
+        snprintf(STAP_RETVALUE, MAXSTRINGLEN, "%pISp", &sockaddr);
+    }
+%}
+
+function _print_socket_address:string (addr) %{
+    struct sockaddr *sockaddr = (struct sockaddr*) STAP_ARG_addr;
+
+    snprintf(STAP_RETVALUE, MAXSTRINGLEN, "%pISp", sockaddr);
+%}

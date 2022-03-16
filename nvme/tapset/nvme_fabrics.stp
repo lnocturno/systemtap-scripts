@@ -1,0 +1,2 @@
+/* Works for MOFED 5.5 */
+probe nvme_fabrics.dev_write_buffer = module("nvme-fabrics").statement("nvmf_dev_write@*/fabrics.c:1082") {}

@@ -1,0 +1,66 @@
+#!/usr/bin/env -S stap -g -v -d kernel -DSTP_NO_BUILDID_CHECK -I tapset
+
+probe begin {
+    printf("NVMe target trace starts\n")
+}
+
+probe nvmet_tcp.alloc_queue {
+    printf("nvmet-tcp: Accepting connection on (%s) from (%s)\n",
+        _print_socket_name($newsock),
+        _print_socket_peer($newsock)
+    );
+}
+
+probe nvmet_tcp.release_queue_work {
+    sock = @container_of($w, "struct nvmet_tcp_queue", release_work)->sock
+    ctrl = @container_of($w, "struct nvmet_tcp_queue", release_work)->nvme_sq->ctrl
+
+    printf("nvmet-tcp: (nvmet%s) Closing connection on (%s) from (%s)\n",
+        _nvmet_ctrlid_print(ctrl),
+        _print_socket_name(sock),
+        _print_socket_peer(sock)
+    );
+}
+
+probe nvmet.req_init.return {
+    printf("nvmet%s: => %s\n",
+        _nvmet_req_ctrlid_print(@entry($req)),
+        _nvmet_req_print(@entry($req))
+    )
+}
+
+probe nvmet.__req_complete.call {
+    printf("nvmet%s: <= %s ( status: %#x = %s)\n",
+        _nvmet_req_ctrlid_print($req),
+        _nvmet_req_print($req),
+        $status,
+        _show_nvme_statuses($status)
+    )
+}
+
+probe nvmet.cmd.fabrics.admin_connect.return {
+    ctrl = @cast(@entry($req), "nvmet_req")->sq->ctrl
+    hostid = &@cast(ctrl, "nvmet_ctrl")->hostid
+    hostnqn = kernel_string(@cast(ctrl, "nvmet_ctrl")->hostnqn)
+    subsysnqn = kernel_string(@cast(ctrl, "nvmet_ctrl")->subsysnqn)
+
+    printf("nvmet%s: admin queue connected (NQN: %s, Host NQN: %s, HostID: %s)\n",
+        _nvmet_req_ctrlid_print(@entry($req)),
+        subsysnqn,
+        hostnqn,
+        _print_uuid(hostid)
+    )
+}
+
+probe nvmet.cmd.fabrics.io_connect.return {
+    qid = @cast(@entry($req), "nvmet_req")->cmd->connect->qid;
+
+    printf("nvmet%s: I/O queue connected (QID: %d)\n",
+        _nvmet_req_ctrlid_print(@entry($req)),
+        qid
+    )
+}
+
+probe end {
+    printf("NVMe target trace ends\n")
+}

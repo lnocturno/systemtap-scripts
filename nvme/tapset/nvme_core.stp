@@ -1,0 +1,2 @@
+probe nvme_core.setup_cmd = module("nvme-core").function("nvme_setup_cmd") {}
+probe nvme_core.complete_rq = module("nvme-core").function("nvme_complete_rq") {}

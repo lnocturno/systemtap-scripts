@@ -1,0 +1,34 @@
+#!/usr/bin/env -S stap -g -v -d kernel -DSTP_NO_BUILDID_CHECK -I tapset
+
+probe nvme.target =
+    module("nvme").function("nvm*"),
+    module("nvme-core").function("nvm*"),
+    module("nvme-fabrics").function("nvm*"),
+    module("nvme-rdma").function("nvm*"),
+    module("nvme-tcp").function("nvm*")
+{
+}
+
+probe begin {
+    printf("NVMe host stacktrace starts\n")
+}
+
+/* Detailed stacktrace */
+probe nvme.target.inline
+{
+    trace(0, $$parms)
+}
+
+probe nvme.target.call
+{
+    trace(4, $$parms)
+}
+
+probe nvme.target.return
+{
+    trace(-4, $$return)
+}
+
+probe end {
+    printf("NVMe host stacktrace ends\n")
+}

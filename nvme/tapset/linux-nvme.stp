@@ -1,0 +1,379 @@
+%{
+#include <linux/nvme.h>
+
+/* Taken from linux/nvme.h since __print_symbolic somehow undefined for systemtap */
+/* COPY-PASTA BEGINS */
+const char* _show_nvm_opcode_name(long opcode) {
+#define _nvme_opcode_name(value) case value: return #value;
+    switch (opcode) {
+_nvme_opcode_name(nvme_cmd_flush)
+_nvme_opcode_name(nvme_cmd_write)
+_nvme_opcode_name(nvme_cmd_read)
+_nvme_opcode_name(nvme_cmd_write_uncor)
+_nvme_opcode_name(nvme_cmd_compare)
+_nvme_opcode_name(nvme_cmd_write_zeroes)
+_nvme_opcode_name(nvme_cmd_dsm)
+_nvme_opcode_name(nvme_cmd_resv_register)
+_nvme_opcode_name(nvme_cmd_resv_report)
+_nvme_opcode_name(nvme_cmd_resv_acquire)
+_nvme_opcode_name(nvme_cmd_resv_release)
+        default:
+            return "<unknown NVMe opcode>";
+    }
+#undef _nvme_opcode_name
+}
+
+const char* _show_fabrics_type_name(long fctype) {
+#define _nvme_fabrics_type_name(value) case value: return #value;
+    switch (fctype) {
+_nvme_fabrics_type_name(nvme_fabrics_type_property_set)
+_nvme_fabrics_type_name(nvme_fabrics_type_connect)
+_nvme_fabrics_type_name(nvme_fabrics_type_property_get)
+        default:
+            return "<unknown fctype>";
+    }
+#undef _nvme_fabrics_type_name
+}
+
+const char* _show_admin_opcode_name(long opcode) {
+#define _nvme_admin_opcode_name(value) case value: return #value;
+    switch (opcode) {
+_nvme_admin_opcode_name(nvme_admin_delete_sq)
+_nvme_admin_opcode_name(nvme_admin_create_sq)
+_nvme_admin_opcode_name(nvme_admin_get_log_page)
+_nvme_admin_opcode_name(nvme_admin_delete_cq)
+_nvme_admin_opcode_name(nvme_admin_create_cq)
+_nvme_admin_opcode_name(nvme_admin_identify)
+_nvme_admin_opcode_name(nvme_admin_abort_cmd)
+_nvme_admin_opcode_name(nvme_admin_set_features)
+_nvme_admin_opcode_name(nvme_admin_get_features)
+_nvme_admin_opcode_name(nvme_admin_async_event)
+_nvme_admin_opcode_name(nvme_admin_ns_mgmt)
+_nvme_admin_opcode_name(nvme_admin_activate_fw)
+_nvme_admin_opcode_name(nvme_admin_download_fw)
+_nvme_admin_opcode_name(nvme_admin_ns_attach)
+_nvme_admin_opcode_name(nvme_admin_keep_alive)
+_nvme_admin_opcode_name(nvme_admin_directive_send)
+_nvme_admin_opcode_name(nvme_admin_directive_recv)
+_nvme_admin_opcode_name(nvme_admin_dbbuf)
+_nvme_admin_opcode_name(nvme_admin_format_nvm)
+_nvme_admin_opcode_name(nvme_admin_security_send)
+_nvme_admin_opcode_name(nvme_admin_security_recv)
+_nvme_admin_opcode_name(nvme_admin_sanitize_nvm)
+_nvme_admin_opcode_name(nvme_admin_get_lba_status)
+        default:
+            return "<unknown admin opcode>";
+    }
+#undef _nvme_admin_opcode_name
+}
+
+const char* _show_opcode_name(long qid, long opcode, long fctype) {
+    return ((opcode) == nvme_fabrics_command ? \
+           _show_fabrics_type_name(fctype) :    \
+           ((qid) ?                            \
+             _show_nvm_opcode_name(opcode) :    \
+             _show_admin_opcode_name(opcode)));
+}
+
+/* COPY-PASTA ENDS */
+%}
+
+function __show_opcode_name:string (qid:long, opcode:long, fctype:long) %{
+    const char* name = _show_opcode_name(
+        STAP_ARG_qid,
+    STAP_ARG_opcode,
+    STAP_ARG_fctype
+    );
+    strlcpy(STAP_RETVALUE, name, MAXSTRINGLEN);
+%}
+
+function _show_nvme_statuses: string (status: long) %{
+    u16 status = STAP_ARG_status;
+    char* statuses = kcalloc(sizeof(char), MAXSTRINGLEN, GFP_KERNEL);
+    size_t free_space = MAXSTRINGLEN; /* TODO: validate overflow */
+    char* _statuses = statuses;
+    char* _status;
+    size_t _status_len;
+    u16 NVME_SC_MORE = 0x2000; /* Missing from header file but set by target */
+
+    #define _include_status(status) \
+        _status = #status " "; \
+        _status_len = strlen(_status); \
+        strlcpy(_statuses, _status, free_space); \
+        free_space -= _status_len; _statuses += _status_len;
+    #define _handle_special_status(status_) if (status & status_) { _include_status(status_) status = status & ~status_; }
+    #define _handle_status(status_) if (status == status_) { _include_status(status_) }
+
+    /* taken from nvme.h */
+
+    _handle_special_status(NVME_SC_CRD)
+    _handle_special_status(NVME_SC_DNR)
+    _handle_special_status(NVME_SC_MORE)
+
+    /*
+     * Generic Command Status:
+     */
+    _handle_status(NVME_SC_SUCCESS)
+    _handle_status(NVME_SC_INVALID_OPCODE)
+    _handle_status(NVME_SC_INVALID_FIELD)
+    _handle_status(NVME_SC_CMDID_CONFLICT)
+    _handle_status(NVME_SC_DATA_XFER_ERROR)
+    _handle_status(NVME_SC_POWER_LOSS)
+    _handle_status(NVME_SC_INTERNAL)
+    _handle_status(NVME_SC_ABORT_REQ)
+    _handle_status(NVME_SC_ABORT_QUEUE)
+    _handle_status(NVME_SC_FUSED_FAIL)
+    _handle_status(NVME_SC_FUSED_MISSING)
+    _handle_status(NVME_SC_INVALID_NS)
+    _handle_status(NVME_SC_CMD_SEQ_ERROR)
+    _handle_status(NVME_SC_SGL_INVALID_LAST)
+    _handle_status(NVME_SC_SGL_INVALID_COUNT)
+    _handle_status(NVME_SC_SGL_INVALID_DATA)
+    _handle_status(NVME_SC_SGL_INVALID_METADATA)
+    _handle_status(NVME_SC_SGL_INVALID_TYPE)
+
+    _handle_status(NVME_SC_SGL_INVALID_OFFSET)
+    _handle_status(NVME_SC_SGL_INVALID_SUBTYPE)
+
+    _handle_status(NVME_SC_SANITIZE_FAILED)
+    _handle_status(NVME_SC_SANITIZE_IN_PROGRESS)
+
+    _handle_status(NVME_SC_NS_WRITE_PROTECTED)
+    _handle_status(NVME_SC_CMD_INTERRUPTED)
+
+    _handle_status(NVME_SC_LBA_RANGE)
+    _handle_status(NVME_SC_CAP_EXCEEDED)
+    _handle_status(NVME_SC_NS_NOT_READY)
+    _handle_status(NVME_SC_RESERVATION_CONFLICT)
+
+    /*
+     * Command Specific Status:
+     */
+    _handle_status(NVME_SC_CQ_INVALID)
+    _handle_status(NVME_SC_QID_INVALID)
+    _handle_status(NVME_SC_QUEUE_SIZE)
+    _handle_status(NVME_SC_ABORT_LIMIT)
+    _handle_status(NVME_SC_ABORT_MISSING)
+    _handle_status(NVME_SC_ASYNC_LIMIT)
+    _handle_status(NVME_SC_FIRMWARE_SLOT)
+    _handle_status(NVME_SC_FIRMWARE_IMAGE)
+    _handle_status(NVME_SC_INVALID_VECTOR)
+    _handle_status(NVME_SC_INVALID_LOG_PAGE)
+    _handle_status(NVME_SC_INVALID_FORMAT)
+    _handle_status(NVME_SC_FW_NEEDS_CONV_RESET)
+    _handle_status(NVME_SC_INVALID_QUEUE)
+    _handle_status(NVME_SC_FEATURE_NOT_SAVEABLE)
+    _handle_status(NVME_SC_FEATURE_NOT_CHANGEABLE)
+    _handle_status(NVME_SC_FEATURE_NOT_PER_NS)
+    _handle_status(NVME_SC_FW_NEEDS_SUBSYS_RESET)
+    _handle_status(NVME_SC_FW_NEEDS_RESET)
+    _handle_status(NVME_SC_FW_NEEDS_MAX_TIME)
+    _handle_status(NVME_SC_FW_ACTIVATE_PROHIBITED)
+    _handle_status(NVME_SC_OVERLAPPING_RANGE)
+    _handle_status(NVME_SC_NS_INSUFFICIENT_CAP)
+    _handle_status(NVME_SC_NS_ID_UNAVAILABLE)
+    _handle_status(NVME_SC_NS_ALREADY_ATTACHED)
+    _handle_status(NVME_SC_NS_IS_PRIVATE)
+    _handle_status(NVME_SC_NS_NOT_ATTACHED)
+    _handle_status(NVME_SC_THIN_PROV_NOT_SUPP)
+    _handle_status(NVME_SC_CTRL_LIST_INVALID)
+    _handle_status(NVME_SC_BP_WRITE_PROHIBITED)
+    _handle_status(NVME_SC_PMR_SAN_PROHIBITED)
+
+    /*
+     * I/O Command Set Specific - NVM commands:
+     */
+    _handle_status(NVME_SC_BAD_ATTRIBUTES)
+    _handle_status(NVME_SC_INVALID_PI)
+    _handle_status(NVME_SC_READ_ONLY)
+    _handle_status(NVME_SC_ONCS_NOT_SUPPORTED)
+
+    /*
+     * I/O Command Set Specific - Fabrics commands:
+     */
+    _handle_status(NVME_SC_CONNECT_FORMAT)
+    _handle_status(NVME_SC_CONNECT_CTRL_BUSY)
+    _handle_status(NVME_SC_CONNECT_INVALID_PARAM)
+    _handle_status(NVME_SC_CONNECT_RESTART_DISC)
+    _handle_status(NVME_SC_CONNECT_INVALID_HOST)
+
+    _handle_status(NVME_SC_DISCOVERY_RESTART)
+    _handle_status(NVME_SC_AUTH_REQUIRED)
+
+    /*
+     * Media and Data Integrity Errors:
+     */
+    _handle_status(NVME_SC_WRITE_FAULT)
+    _handle_status(NVME_SC_READ_ERROR)
+    _handle_status(NVME_SC_GUARD_CHECK)
+    _handle_status(NVME_SC_APPTAG_CHECK)
+    _handle_status(NVME_SC_REFTAG_CHECK)
+    _handle_status(NVME_SC_COMPARE_FAILED)
+    _handle_status(NVME_SC_ACCESS_DENIED)
+    _handle_status(NVME_SC_UNWRITTEN_BLOCK)
+
+    /*
+     * Path-related Errors:
+     */
+    _handle_status(NVME_SC_ANA_PERSISTENT_LOSS)
+    _handle_status(NVME_SC_ANA_INACCESSIBLE)
+    _handle_status(NVME_SC_ANA_TRANSITION)
+    _handle_status(NVME_SC_HOST_PATH_ERROR)
+    _handle_status(NVME_SC_HOST_ABORTED_CMD)
+
+    #undef _handle_status
+    #undef _handle_special_status
+    #undef _include_status
+
+    /* Finally get it all together */
+        strlcpy(STAP_RETVALUE, statuses, MAXSTRINGLEN);
+
+    kfree(statuses);
+%}
+
+function _nvme_command_fabrics_print (cmd:long) %{
+    struct nvme_command* cmd = (struct nvme_command*) STAP_ARG_cmd;
+    u8 fctype = cmd->fabrics.fctype;
+
+    switch (fctype) {
+        case nvme_fabrics_type_connect:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "recfmt=%u, qid=%u, sqsize=%u, cattr=%u, kato=%u",
+                cmd->connect.recfmt,
+                cmd->connect.qid,
+                cmd->connect.sqsize,
+                cmd->connect.cattr,
+                cmd->connect.kato
+            );
+        break;
+        case nvme_fabrics_type_property_set:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "attrib=%u, offset=%#x, value=%#llx",
+                cmd->prop_set.attrib,
+                cmd->prop_set.offset,
+                cmd->prop_set.value
+            );
+        break;
+        case nvme_fabrics_type_property_get:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "attrib=%u, offset=%#x",
+                cmd->prop_set.attrib,
+                cmd->prop_set.offset
+            );
+        break;
+    }
+%}
+
+function _nvme_command_nvm_print (cmd) %{
+    struct nvme_command* cmd = (struct nvme_command*) STAP_ARG_cmd;
+    u8 opcode = cmd->common.opcode;
+
+    switch (opcode) {
+        case nvme_cmd_read:
+        case nvme_cmd_write:
+        case nvme_cmd_write_zeroes:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "slba=%llu, len=%u, ctrl=0x%x, dsmgmt=%u, reftag=%u",
+                cmd->rw.slba,
+                cmd->rw.length,
+                cmd->rw.control,
+                cmd->rw.dsmgmt,
+                cmd->rw.reftag
+            );
+        break;
+        case nvme_cmd_dsm:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "nr=%u attributes=%u",
+                cmd->dsm.nr,
+                cmd->dsm.attributes
+            );
+        break;
+/*
+        case nvme_cmd_zone_mgmt_send:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "slba=%llu, zsa=%u, all=%u",
+                cmd->zms.slba,
+                cmd->zms.zsa,
+                cmd->zms.all
+            );
+        break;
+        case nvme_cmd_zone_mgmt_recv:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "slba=%llu, numd=%u, zra=%u, zrasf=%u, pr=%u",
+                cmd->zmr.slba,
+                cmd->zmr.numd,
+                cmd->zmr.zra,
+                cmd->zmr.zrasf,
+                cmd->zmr.pr
+            );
+        break;
+*/
+    }
+%}
+
+function _nvme_command_admin_print (cmd) %{
+    struct nvme_command* cmd = (struct nvme_command*) STAP_ARG_cmd;
+    u8 opcode = cmd->common.opcode;
+
+    switch (opcode) {
+        case nvme_admin_delete_sq:
+        case nvme_admin_delete_cq:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "qid=%u",
+                cmd->delete_queue.qid
+            );
+        break;
+        case nvme_admin_create_sq:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "sqid=%u, qsize=%u, sq_flags=0x%x, cqid=%u",
+                cmd->create_sq.sqid,
+                cmd->create_sq.qsize,
+                cmd->create_sq.sq_flags,
+                cmd->create_sq.cqid
+            );
+        break;
+        case nvme_admin_create_cq:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "cqid=%u, qsize=%u, cq_flags=0x%x, irq_vector=%u",
+                cmd->create_cq.cqid,
+                cmd->create_cq.qsize,
+                cmd->create_cq.cq_flags,
+                cmd->create_cq.irq_vector
+            );
+        break;
+        case nvme_admin_identify:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "cns=%u, ctrlid=%u",
+                cmd->identify.cns,
+                cmd->identify.ctrlid
+            );
+            /* cmd->identify.csi */
+        break;
+        case nvme_admin_set_features:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "fid=%#x, dword11=%#x",
+                cmd->features.fid,
+                cmd->features.dword11
+            );
+        break;
+        case nvme_admin_get_features:
+            snprintf(STAP_RETVALUE, MAXSTRINGLEN, "fid=%#x, dword11=%#x",
+                cmd->features.fid,
+                cmd->features.dword11
+            );
+        break;
+    }
+%}
+
+function _is_nvme_fabrics_command (opcode) %{
+    u8 opcode = STAP_ARG_opcode;
+    STAP_RETVALUE = (opcode == nvme_fabrics_command);
+%}
+
+function __nvme_command_print (qid, cmd) {
+    opcode = @cast(cmd, "nvme_command")->common->opcode
+
+    return _is_nvme_fabrics_command(opcode) ? _nvme_command_fabrics_print(cmd)
+        : (qid ? _nvme_command_nvm_print(cmd) : _nvme_command_admin_print(cmd))
+}
+
+function _nvme_command_print(qid, cmd) {
+    cid = @cast(cmd, "nvme_command")->common->command_id
+    nsid = @cast(cmd, "nvme_command")->common->nsid
+    opcode = @cast(cmd, "nvme_command")->common->opcode
+    fctype = @cast(cmd, "nvme_command")->fabrics->fctype
+
+    return sprintf("QID: %d command_id: %d nsid: %d cmd: %s, %s",
+        qid, cid, nsid,
+        __show_opcode_name(qid, opcode, fctype),
+    __nvme_command_print(qid, cmd)
+    )
+}

@@ -1,0 +1,7 @@
+function _nvme_tcp_queue_id (queue) {
+    return (queue - @cast(queue, "nvme_tcp_queue")->ctrl->queues) / @cast_sizeof("nvme_tcp_queue")
+}
+
+probe nvme_tcp.alloc_queue = module("nvme-tcp").function("nvme_tcp_alloc_queue") {}
+probe nvme_tcp.init_connection = module("nvme-tcp").function("nvme_tcp_init_connection") {}
+probe nvme_tcp.free_queue = module("nvme-tcp").function("nvme_tcp_free_queue") {}

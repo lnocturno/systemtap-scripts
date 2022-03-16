@@ -1,0 +1,12 @@
+/* Request handling */
+
+probe nvmet.req_init = module("nvmet").function("nvmet_req_init") {}
+probe nvmet.req_complete = module("nvmet").function("nvmet_req_complete") {}
+probe nvmet.__req_complete = module("nvmet").function("__nvmet_req_complete") {}
+
+/* NVMe commands */
+
+/* Fabrics */
+
+probe nvmet.cmd.fabrics.admin_connect = module("nvmet").function("nvmet_execute_admin_connect") {}
+probe nvmet.cmd.fabrics.io_connect = module("nvmet").function("nvmet_execute_io_connect") {}

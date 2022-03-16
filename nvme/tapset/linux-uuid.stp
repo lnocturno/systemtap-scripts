@@ -1,0 +1,9 @@
+%{
+#include <linux/uuid.h>
+%}
+
+function _print_uuid(uuid) %{
+    const struct uuid_t *uuid = (struct uuid_t*)STAP_ARG_uuid;
+
+    snprintf(STAP_RETVALUE, MAXSTRINGLEN, "%pUB", uuid);
+%}

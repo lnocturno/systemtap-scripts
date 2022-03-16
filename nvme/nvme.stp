@@ -1,0 +1,76 @@
+#!/usr/bin/env -S stap -g -v -d kernel -DSTP_NO_BUILDID_CHECK -I tapset
+
+probe begin {
+        printf("NVMe host trace starts\n")
+}
+
+probe nvme_core.setup_cmd.return {
+    printf("%s nvme%s: => %s\n",
+        thread_indent(0),
+        _nvme_req_ctrlid_print(@entry($req)),
+        _nvme_req_print(@entry($req))
+    )
+}
+
+probe nvme_core.complete_rq.call {
+    status = @cast(nvme_req($req), "nvme_request")->status
+
+    printf("%s nvme%s: <= %s status: %#x = %s\n",
+        thread_indent(0),
+        _nvme_req_ctrlid_print($req),
+        _nvme_req_print($req),
+        status,
+        _show_nvme_statuses(status)
+    )
+}
+
+probe nvme_fabrics.dev_write_buffer {
+    printf("%s New request on /dev/nvme-fabrics: %s\n",
+        thread_indent(0),
+        kernel_string($buf)
+    )
+}
+
+probe nvme_tcp.alloc_queue.call {
+    addr = &@container_of($nctrl, "struct nvme_tcp_ctrl", ctrl)->addr
+    src_addr = &@container_of($nctrl, "struct nvme_tcp_ctrl", ctrl)->src_addr
+
+    printf("%s nvme%s: (TCP) Allocating new queue: QID: %d, from (%s) to (%s)...\n",
+        thread_indent(0),
+        _nvme_ctrlid_print($nctrl),
+        $qid,
+        _print_socket_address(src_addr),
+        _print_socket_address(addr)
+    )
+}
+
+probe nvme_tcp.init_connection.call {
+    ctrl = &@cast($queue, "nvme_tcp_queue")->ctrl->ctrl
+    sock = @cast($queue, "nvme_tcp_queue")->sock
+    qid  = _nvme_tcp_queue_id($queue)
+
+    printf("%s nvme%s: (TCP) Connection established: QID: %d, from (%s) to (%s)...\n",
+        thread_indent(0),
+        _nvme_ctrlid_print(ctrl),
+        qid,
+        _print_socket_name(sock),
+        _print_socket_peer(sock)
+    )
+}
+
+probe nvme_tcp.free_queue.call {
+    addr = &@container_of($nctrl, "struct nvme_tcp_ctrl", ctrl)->addr
+    src_addr = &@container_of($nctrl, "struct nvme_tcp_ctrl", ctrl)->src_addr
+
+    printf("%s nvme%s: (TCP) Free queue: QID: %d, from (%s) to (%s)...\n",
+        thread_indent(0),
+        _nvme_ctrlid_print($nctrl),
+        $qid,
+        _print_socket_address(src_addr),
+        _print_socket_address(addr)
+    )
+}
+
+probe end {
+        printf("NVMe host trace ends\n")
+}
